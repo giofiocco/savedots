@@ -1,0 +1,123 @@
+#!/bin/sh
+
+if [ "$1" = "help" ]; then 
+  echo "savedots [command]"
+  echo "  init     inits the repo"
+  echo "  install  installs the command"
+  echo "  cp       copies files from the repo to their location"
+  echo "  help     prints this help page"
+  exit 0
+elif [ "$1" = "install" ]; then
+  sudo cp savedots /usr/local/bin/savedots
+  exit 0
+fi
+
+if ! command -v jq &> /dev/null; then
+  echo "jq could not be found"
+  exit 1
+fi
+
+if ! command -v git &> /dev/null; then
+  echo "git could not be found"
+  exit 1
+fi
+
+if [ "$1" = "cp" ]; then
+  if [ ! -f savedots.json ]; then
+    echo "savedots.json not found"
+    exit 1
+  fi
+  if [ -f savedots.json ]; then
+    read -p "file $path already exists, wanna override it? [Y/n]: " -r
+    if [[ ! $REPLY =~ ^[Yy]{0,1}$ ]]; then
+      exit 1
+    fi 
+  fi
+  cp savedots.json $HOME/.config/savedots.json
+  files=$(jq ".files" savedots.json)
+  LEN=$(echo $files | jq '. | length')
+  for (( i=0; i<$LEN; i++ )); do
+    name=$(echo $files | jq -r ".[$i].name")
+    path=$(echo $files | jq -r ".[$i].path")
+    path=${path/\~/$HOME}
+    if [ -f $path ]; then
+      read -p "file $path already exists, wanna override it? [Y/n]: " -r
+      if [[ ! $REPLY =~ ^[Yy]{0,1}$ ]]; then
+        continue
+      fi
+    fi
+    if [ ! -d "${path%/*}" ]; then
+      mkdir ${path%/*}
+    fi
+    cp $name $path
+    echo copied $name $path
+  done
+  exit 0
+fi
+
+configfile="$HOME/.config/savedots.json"
+if [ ! -f "$configfile" ]; then
+  echo "$configfile not found"
+  exit 1
+fi
+
+cachedir=$HOME/.cache/savedots
+repo=$(jq -r '.remoterepo' $configfile)
+
+if [ "$1" = "init" ]; then
+  if [ ! -d "$cachedir" ]; then
+    mkdir $cachedir
+    cd $cachedir
+    git init
+    git remote add origin $repo
+    cp $configfile $cachedir/savedots.json
+    cd -
+    cp $0 $cachedir/savedots
+    cd $cachedir
+    git add .
+    git commit -m "start"
+  else
+    echo savedots already inited
+    exit 1
+  fi
+else
+  if [ ! -d "$cachedir" ]; then
+    if ! git ls-remote --exit-code $repo > /dev/null 2>&1; then
+      echo $repo does not exists or is empty
+      echo try running $0 init
+      exit 1
+    fi
+    git clone --depth=1 $repo $cachedir
+  fi
+fi
+
+jq -c ".files.[]" $configfile | while read i; do
+name=$(jq -r '.name' <<< $i)
+path=$(jq -r '.path' <<< $i)
+path=${path/\~/$HOME}
+file=$cachedir/$name
+if [ ! -f "$path" ]; then
+  echo file $path needed for $name not found
+fi
+cd $cachedir
+if [ ! -f $file ] || ! git diff $file $path; then
+  if [[ $name == *"/"* ]]; then
+    mkdir ${file%/*}
+  fi
+  cp $path $file
+  git add $file
+fi
+done
+
+if ! git diff $configfile $cachedir/savedot.json; then
+  cp $configfile $cachedir/savedot.json
+  git add $cachedir/savedot.json
+fi
+
+cd $cachedir
+if [[ `git status --porcelain` ]]; then
+  git commit -m $(date +%F:%T)
+  git push -u origin master
+fi
+
+
