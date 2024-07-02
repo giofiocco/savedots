@@ -126,6 +126,10 @@ if [ "$1" = "add" ]; then
     read -p "name: " name
   fi
   
+  if [[ ! $path == "/*" ]]; then
+    path=$(pwd)/$path
+  fi
+
   obj="{\"name\": \"$name\",\"path\": \"${path/$HOME/\~}\"}"
 
   if [ ! $(jq ".files | index($obj)" $configfile) = null ]; then
