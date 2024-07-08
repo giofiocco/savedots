@@ -4,12 +4,17 @@ set -e
 
 if [ "$1" = "help" ]; then 
   echo "savedots [command]"
-  echo "  init     inits the repo"
-  echo "  install  installs the command"
-  echo "  cp       copies files from the repo to their location"
-  echo "  help     prints this help page"
+  echo "  init                inits the repo"
+  echo "  install             installs the command"
+  echo "  cp                  copies files from the repo to their location"
+  echo "  add [path] [name]   add file to the config file"
+  echo "  help                prints this help page"
   exit 0
 elif [ "$1" = "install" ]; then
+  if [ ! -f "savedots" ]; then
+    echo "cannot find savedots in the directory"
+    exit 1
+  fi
   sudo cp savedots /usr/local/bin/savedots
   exit 0
 fi
@@ -125,6 +130,11 @@ if [ "$1" = "add" ]; then
   if [ ! "$name" ]; then
     read -p "name: " name
   fi
+
+  if [ ! -f $path ]; then
+    echo "file $path does not exists"
+    exit 1
+  fi
   
   if [[ ! $path == "/*" ]]; then
     path=$(pwd)/$path
@@ -144,31 +154,27 @@ if [ "$1" = "add" ]; then
 fi
 
 jq -c ".files.[]" $configfile | while read i; do
-name=$(jq -r '.name' <<< $i)
-path=$(jq -r '.path' <<< $i)
-path=${path/\~/$HOME}
-file=$cachedir/$name
-if [ ! -f "$path" ]; then
-  echo file $path needed for $name not found
-fi
-cd $cachedir
-if [ ! -f $file ] || ! git diff $file $path; then
-  if [[ $name == *"/"* ]]; then
-    mkdir ${file%/*}
+  name=$(jq -r '.name' <<< $i)
+  path=$(jq -r '.path' <<< $i)
+  path=${path/\~/$HOME}
+  file=$cachedir/$name
+  if [ ! -f "$path" ]; then
+    echo file $path needed for $name not found
   fi
-  cp $path $file
-  git add $file
-fi
+  cd $cachedir
+  if [ ! -f $file ] || ! git diff $file $path; then
+    if [ ! -d ${file%/*} ] && [[ $name == *"/"* ]]; then
+      mkdir ${file%/*}
+    fi
+    cp $path $file
+    git add $file
+  fi
 done
 
-if ! git diff $configfile $cachedir/savedots.json; then
-  cp $configfile $cachedir/savedots.json
-  git add $cachedir/savedots.json
-fi
-
 cd $cachedir
+git add savedots.json
+
 if [[ `git status --porcelain` ]]; then
-  echo "asd"
   git commit -m $(date +%F:%T)
   git push -u origin master
 fi
