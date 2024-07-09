@@ -176,7 +176,11 @@ git add savedots.json
 
 if [[ `git status --porcelain` ]]; then
   git commit -m $(date +%F:%T)
-  git push -u origin master
 fi
 
+if ! git merge-base --is-ancestor HEAD @{u}; then
+  if ping -qn4c1 8.8.8.8 2>&1 >/dev/null; then
+    git push -u origin master
+  fi
+fi
 
