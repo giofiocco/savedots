@@ -171,14 +171,15 @@ jq -c ".files.[]" $configfile | while read i; do
   fi
 done
 
-cd $cachedir
 
-if [ ! -f savedots.json ]; then
-  cp $configfile savedots.json
+if [ ! -f $cachedir/savedots.json ]; then
+  cp $configfile $cachedir/savedots.json
 fi
-if [ ! -f savedots ]; then
-  cp $0 savedots
+if [ ! -f $cachedir/savedots ]; then
+  cp $0 $cachedir/savedots
 fi
+
+cd $cachedir
 
 find -type f | grep -v .git | sed 's/.\///' | while read i; do 
 if [ $i = "savedots.json" ]; then
@@ -197,14 +198,22 @@ fi
 done
 
 git add savedots.json
+git add savedots
 
 if [[ `git status --porcelain` ]]; then
-  git commit -m $(date +%F:%T)
+  read -p "commit message: " message
+  if [ ! $message ]; then
+    message=$(date +%F:%T)
+  fi
+  git commit -m $message 
 fi
 
 if ! git merge-base --is-ancestor HEAD @{u}; then
-  if ping -qn4c1 8.8.8.8 2>&1 >/dev/null; then
+  if ping -qn4c1 8.8.8.8 > /dev/null 2>&1; then
     git push -u origin master
+  else
+    echo "changes unpushed, network unreachable"
+    exit 1
   fi
 fi
 
