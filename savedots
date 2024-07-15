@@ -172,6 +172,30 @@ jq -c ".files.[]" $configfile | while read i; do
 done
 
 cd $cachedir
+
+if [ ! -f savedots.json ]; then
+  cp $configfile savedots.json
+fi
+if [ ! -f savedots ]; then
+  cp $0 savedots
+fi
+
+find -type f | grep -v .git | sed 's/.\///' | while read i; do 
+if [ $i = "savedots.json" ]; then
+  continue
+fi
+if [ $i = "savedots" ]; then
+  continue
+fi
+if [[ ! `jq ".files[] | select(.name == \"$i\")" $configfile` ]]; then
+  if ! git ls-files --error-unmatch $i > /dev/null 2>&1; then
+    rm ./$i
+  else
+    git rm ./$i
+  fi
+fi
+done
+
 git add savedots.json
 
 if [[ `git status --porcelain` ]]; then
